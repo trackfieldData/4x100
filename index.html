@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>4x100 Relay Exchange Calculator (MVP)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#f4f5f7; --card:#fff; --border:#dde1e7; --text:#1a1d23; --muted:#6b7280;
+    --accent:#1d4ed8; --good:#16a34a; --warn:#f59e0b; --bad:#dc2626;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+  header{background:#1a1d23;color:#fff;padding:14px 20px}
+  header h1{font-size:16px;font-weight:800;letter-spacing:-.2px}
+  header p{font-size:12px;color:#a1a1aa;margin-top:4px}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card + .card{margin-top:14px}
+  .card-title{padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+  .content{padding:14px}
+  .grid{display:grid;grid-template-columns: 1fr 1fr;gap:14px}
+  @media (max-width: 900px){.grid{grid-template-columns:1fr}}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+  .ctrl{display:flex;flex-direction:column;gap:6px}
+  label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  input[type=number]{width:110px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:15px;font-weight:700}
+  input[type=range]{width:220px}
+  select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-weight:700}
+  .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#fafafa;font-weight:700}
+  .pill.good{color:#166534;background:#dcfce7;border-color:#bbf7d0}
+  .pill.warn{color:#854d0e;background:#fef9c3;border-color:#fde68a}
+  .pill.bad{color:#7f1d1d;background:#fee2e2;border-color:#fecaca}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 10px;border-bottom:1px solid #eef0f4;text-align:right;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:11px;color:var(--muted);font-weight:800;background:var(--bg)}
+  .small{font-size:12px;color:var(--muted)}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width: 900px){.charts{grid-template-columns:1fr}}
+  .chartBox{height:320px;padding:10px 12px}
+  .note{padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:#fbfbfd;color:var(--muted);font-size:12px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+</style>
+</head>
+<body>
+<header>
+  <h1>4x100 Relay Exchange Calculator — MVP</h1>
+  <p>Math-first exchange point optimizer + coach go-mark adjustment. Uses your 100m 10m-split regression model.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <div class="card-title">Inputs</div>
+    <div class="content">
+      <div class="row" style="justify-content:space-between;">
+        <div class="row">
+          <div class="ctrl">
+            <label>Model</label>
+            <select id="gender">
+              <option value="U" selected>Unified</option>
+              <option value="M">Men</option>
+              <option value="W">Women</option>
+            </select>
+          </div>
+
+          <div class="ctrl">
+            <label>Free distance (m)</label>
+            <input type="range" id="freeDist" min="0" max="2" step="0.05" value="1.20" />
+            <div class="small"><span id="freeDistVal" class="mono">1.20</span> m (handoff geometry / reach)</div>
+          </div>
+
+          <div class="ctrl">
+            <label>Reaction time (s)</label>
+            <input type="range" id="react" min="0.00" max="0.35" step="0.01" value="0.12" />
+            <div class="small"><span id="reactVal" class="mono">0.12</span> s (outgoing starts moving after this)</div>
+          </div>
+
+          <div class="ctrl">
+            <label>Zone length</label>
+            <div class="pill">30 m (college / pro)</div>
+          </div>
+        </div>
+
+        <div class="note" style="max-width:520px">
+          <strong>How to use:</strong> enter estimated open 100m times. The optimizer chooses an exchange point in-zone to minimize baton time through the 30m zone (instantaneous exchange). Then use the <em>Go mark adjustment</em> sliders to trade a bit of time for safety.
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="grid">
+        <div class="card" style="border-radius:10px">
+          <div class="card-title">Athlete 100m times</div>
+          <div class="content">
+            <div class="row">
+              <div class="ctrl"><label>Leg 1 time</label><input id="t1" type="number" step="0.01" min="9.0" max="14.5" value="10.20"></div>
+              <div class="ctrl"><label>Leg 2 time</label><input id="t2" type="number" step="0.01" min="9.0" max="14.5" value="10.10"></div>
+              <div class="ctrl"><label>Leg 3 time</label><input id="t3" type="number" step="0.01" min="9.0" max="14.5" value="10.25"></div>
+              <div class="ctrl"><label>Leg 4 time</label><input id="t4" type="number" step="0.01" min="9.0" max="14.5" value="10.05"></div>
+            </div>
+            <div class="small" style="margin-top:10px">
+              This MVP assumes each leg’s speed profile shape follows the same 100m model for their time. Legs 2–4 can be evaluated beyond 100m using a decel tail derived from the last three 10m segments.
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="border-radius:10px">
+          <div class="card-title">Coach go-mark adjustment</div>
+          <div class="content">
+            <div class="small">Adjustment is applied to the <strong>optimal</strong> go mark (positive = outgoing starts earlier; negative = starts later).</div>
+            <div style="height:10px"></div>
+            <div class="ctrl">
+              <label>Exchange 1→2 go mark adjust (m)</label>
+              <input type="range" id="adj12" min="-8" max="8" step="0.1" value="0">
+              <div class="small"><span id="adj12Val" class="mono">0.0</span> m</div>
+            </div>
+            <div class="ctrl">
+              <label>Exchange 2→3 go mark adjust (m)</label>
+              <input type="range" id="adj23" min="-8" max="8" step="0.1" value="0">
+              <div class="small"><span id="adj23Val" class="mono">0.0</span> m</div>
+            </div>
+            <div class="ctrl">
+              <label>Exchange 3→4 go mark adjust (m)</label>
+              <input type="range" id="adj34" min="-8" max="8" step="0.1" value="0">
+              <div class="small"><span id="adj34Val" class="mono">0.0</span> m</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Exchange results</div>
+    <div class="content">
+      <table>
+        <thead>
+          <tr>
+            <th>Exchange</th>
+            <th>Status</th>
+            <th>Optimal exchange (m into zone)</th>
+            <th>Optimal go mark (m before zone)</th>
+            <th>Adjusted go mark</th>
+            <th>Actual exchange (m into zone)</th>
+            <th>v_in @ exch (m/s)</th>
+            <th>v_out @ exch (m/s)</th>
+            <th>Baton time through zone (s)</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div class="small" style="margin-top:10px">
+        “Go mark before zone” means: when incoming runner hits that mark <em>before the zone start</em>, outgoing starts (after reaction time). If an adjusted go mark causes exchange outside the 30m zone, it will show invalid.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Charts (selected exchange)</div>
+    <div class="content">
+      <div class="row">
+        <div class="ctrl">
+          <label>View exchange</label>
+          <select id="whichEx">
+            <option value="12">1 → 2</option>
+            <option value="23">2 → 3</option>
+            <option value="34">3 → 4</option>
+          </select>
+        </div>
+        <div id="statusPill" class="pill">—</div>
+        <div class="small" id="chartCaption"></div>
+      </div>
+
+      <div style="height:10px"></div>
+
+      <div class="charts">
+        <div class="card" style="border-radius:10px">
+          <div class="card-title">Speed vs distance (around exchange zone)</div>
+          <div class="chartBox"><canvas id="speedChart"></canvas></div>
+        </div>
+        <div class="card" style="border-radius:10px">
+          <div class="card-title">Baton position vs time (within zone)</div>
+          <div class="chartBox"><canvas id="batonChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ======================================================================================
+   MODEL (copied from your 100m_race_model.html)
+====================================================================================== */
+const MODEL = {
+  checkpoints: [10,20,30,40,50,60,70,80,90,100],
+  unified: {
+    slopes:     [-0.00645487, -0.00861534, -0.00906471, -0.00962246, -0.00924740,
+                 -0.00775895, -0.00647035, -0.00443143, -0.00246799, 0.0],
+    intercepts: [ 0.25357917,  0.37940065,  0.47679734,  0.57166516,  0.65460446,
+                  0.72605480,  0.79883785,  0.86586749,  0.93395723,  1.0],
+    range:      [9.58, 12.97],
+  },
+  men: {
+    slopes:     [-0.00694051, -0.01041460, -0.00997312, -0.01242238, -0.01190783,
+                 -0.00961805, -0.00927479, -0.00612884, -0.00355244, 0.0],
+    intercepts: [ 0.25847209,  0.39783930,  0.48617280,  0.60032530,  0.68174208,
+                  0.74522932,  0.82749190,  0.88335878,  0.94508165,  1.0],
+    range:      [9.58, 11.50],
+  },
+  women: {
+    slopes:     [-0.00713107, -0.00868284, -0.00889248, -0.01003663, -0.01039780,
+                 -0.00745217, -0.00727197, -0.00416399, -0.00245924, 0.0],
+    intercepts: [ 0.26149435,  0.38040312,  0.47491699,  0.57681549,  0.66831099,
+                  0.72275198,  0.80849070,  0.86299367,  0.93398696,  1.0],
+    range:      [10.49, 12.97],
+  }
+};
+
+function getCoeffs(g) {
+  if (g === 'M') return MODEL.men;
+  if (g === 'W') return MODEL.women;
+  return MODEL.unified;
+}
+
+/* ======================================================================================
+   1) Build cumulative split times for a target 100 time:
+      - we reuse your regression ratios method (same as your original file)
+====================================================================================== */
+function computeSplits100(targetTime, gender) {
+  const coeffs = getCoeffs(gender);
+  const rawRatios = coeffs.intercepts.map((b,i) => b + coeffs.slopes[i]*targetTime);
+  let intervals = rawRatios.map((r,i)=> i===0 ? r : r-rawRatios[i-1]);
+  intervals = intervals.map(v=>Math.max(v,0.001));
+  const total = intervals.reduce((a,b)=>a+b,0);
+  intervals = intervals.map(v=>v/total);
+
+  // Light smoothing (same spirit as your file) to avoid non-physical dips.
+  const N=10, W=0.20, LO=2, HI=8;
+  for (let pass=0; pass<3; pass++){
+    let midBefore=0; for (let i=LO;i<=HI;i++) midBefore += intervals[i];
+    const sm=[...intervals];
+    for (let i=LO;i<=HI;i++){
+      const left  = i>0 ? intervals[i-1] : intervals[i];
+      const right = i<N-1 ? intervals[i+1] : intervals[i];
+      sm[i] = left*W + intervals[i]*(1-2*W) + right*W;
+    }
+    let midAfter=0; for (let i=LO;i<=HI;i++) midAfter += sm[i];
+    if (midAfter>0){
+      const scale = midBefore/midAfter;
+      for (let i=LO;i<=HI;i++) sm[i]*=scale;
+    }
+    intervals = sm;
+  }
+
+  const cumRatios=[]; let s=0;
+  for (const iv of intervals){ s+=iv; cumRatios.push(s); }
+  cumRatios[9]=1.0;
+
+  const splits = cumRatios.map(r=>r*targetTime); // cumulative time at 10..100
+  const cps = MODEL.checkpoints.slice();
+  const pts = cps.map((d,i)=>({x:d, y:splits[i]}));
+  return pts; // points for t(x) on [10..100]
+}
+
+/* ======================================================================================
+   2) Monotone cubic interpolation for t(x) (PCHIP)
+      - gives smooth t(x), monotone if data monotone (it is)
+      - we can compute dt/dx piecewise to get speed v(x) = 1/(dt/dx)
+====================================================================================== */
+function pchipSlopes(xs, ys) {
+  const n = xs.length;
+  const h = new Array(n-1), delta = new Array(n-1);
+  for (let i=0;i<n-1;i++){
+    h[i]=xs[i+1]-xs[i];
+    delta[i]=(ys[i+1]-ys[i])/h[i];
+  }
+  const m = new Array(n);
+
+  // endpoints
+  m[0]=delta[0];
+  m[n-1]=delta[n-2];
+
+  // internal
+  for (let i=1;i<n-1;i++){
+    if (delta[i-1]===0 || delta[i]===0 || (delta[i-1]>0)!==(delta[i]>0)) {
+      m[i]=0;
+    } else {
+      const w1=2*h[i]+h[i-1];
+      const w2=h[i]+2*h[i-1];
+      m[i]=(w1+w2)/(w1/delta[i-1]+w2/delta[i]);
+    }
+  }
+  return {h, delta, m};
+}
+
+function pchipEvalAndDeriv(xs, ys, pre, xq) {
+  const n=xs.length;
+  if (xq<=xs[0]) {
+    // linear extrap below first point (we’ll anchor at 0 separately)
+    const d=(ys[1]-ys[0])/(xs[1]-xs[0]);
+    return {y: ys[0] + d*(xq-xs[0]), dydx: d};
+  }
+  if (xq>=xs[n-1]) {
+    const d=(ys[n-1]-ys[n-2])/(xs[n-1]-xs[n-2]);
+    return {y: ys[n-1] + d*(xq-xs[n-1]), dydx: d};
+  }
+  // find interval
+  let i=0;
+  while (i<n-1 && !(xq>=xs[i] && xq<=xs[i+1])) i++;
+  const h = pre.h[i];
+  const t = (xq-xs[i])/h;
+  const t2=t*t, t3=t2*t;
+
+  const y0=ys[i], y1=ys[i+1];
+  const m0=pre.m[i], m1=pre.m[i+1];
+
+  // Cubic Hermite basis
+  const h00 = 2*t3 - 3*t2 + 1;
+  const h10 = t3 - 2*t2 + t;
+  const h01 = -2*t3 + 3*t2;
+  const h11 = t3 - t2;
+
+  const y = h00*y0 + h10*h*m0 + h01*y1 + h11*h*m1;
+
+  // derivative dy/dx
+  const dh00 = (6*t2 - 6*t)/h;
+  const dh10 = (3*t2 - 4*t + 1)/1; // wrt t
+  const dh01 = (-6*t2 + 6*t)/h;
+  const dh11 = (3*t2 - 2*t)/1;
+
+  const dydx = dh00*y0 + (dh10*m0) + dh01*y1 + (dh11*m1);
+
+  return {y, dydx};
+}
+
+/* ======================================================================================
+   3) Build a continuous profile object for an athlete:
+      - Provides t(x) and v(x) up to 130m
+      - For x>100, extrapolate using decel derived from last 3 segments
+====================================================================================== */
+function buildProfile(athlete100, gender) {
+  // Build points including x=0,y=0 and 10..100
+  const pts10to100 = computeSplits100(athlete100, gender); // at 10..100
+  const xs = [0, ...pts10to100.map(p=>p.x)];
+  const ys = [0, ...pts10to100.map(p=>p.y)];
+
+  const pre = pchipSlopes(xs, ys);
+
+  // derive decel beyond 100 using last 3 10m segments (70-80,80-90,90-100)
+  // We work in speed at segment midpoints as a proxy and fit linear slope of speed vs distance.
+  const t70 = ys[xs.indexOf(70)];
+  const t80 = ys[xs.indexOf(80)];
+  const t90 = ys[xs.indexOf(90)];
+  const t100= ys[xs.indexOf(100)];
+  const v75 = 10/(t80-t70);
+  const v85 = 10/(t90-t80);
+  const v95 = 10/(t100-t90);
+
+  // Fit v(d) = a + b*d to points (75,v75),(85,v85),(95,v95)
+  const ds=[75,85,95], vs=[v75,v85,v95];
+  const meanD=(ds[0]+ds[1]+ds[2])/3, meanV=(vs[0]+vs[1]+vs[2])/3;
+  let num=0, den=0;
+  for (let i=0;i<3;i++){ num += (ds[i]-meanD)*(vs[i]-meanV); den += (ds[i]-meanD)*(ds[i]-meanD); }
+  const b = den>0 ? num/den : 0;      // slope (usually negative)
+  const a = meanV - b*meanD;
+
+  // Extend beyond 100 by integrating dx/v(x) with small steps using v(d)=max(vmin, a+b*d)
+  const vMin = 3.0; // never let it go absurdly low within 130m
+  function vTail(d){
+    return Math.max(vMin, a + b*d);
+  }
+
+  // cache tail t(100..130) with 0.1m steps for fast inversion
+  const tailStep=0.1, tailMax=130;
+  const tail = [];
+  let t = t100;
+  let d = 100;
+  tail.push({x:100, t:t});
+  while (d < tailMax - 1e-9) {
+    const d2 = Math.min(tailMax, d+tailStep);
+    const v = vTail((d+d2)/2);
+    t += (d2-d)/v;
+    d = d2;
+    tail.push({x:d, t:t});
+  }
+
+  function tOfX(x) {
+    if (x<=100){
+      const ev = pchipEvalAndDeriv(xs, ys, pre, x);
+      return ev.y;
+    }
+    // lookup in tail (linear interp)
+    if (x>=tailMax) x=tailMax;
+    const idx = Math.min(tail.length-2, Math.floor((x-100)/tailStep));
+    const p0 = tail[idx], p1 = tail[idx+1];
+    const u = (x-p0.x)/(p1.x-p0.x);
+    return p0.t + u*(p1.t-p0.t);
+  }
+
+  function vOfX(x) {
+    if (x<0) return 0;
+    if (x<=100){
+      const ev = pchipEvalAndDeriv(xs, ys, pre, x);
+      const dt_dx = Math.max(1e-6, ev.dydx);
+      return 1/dt_dx;
+    }
+    return vTail(x);
+  }
+
+  // inverse: xOfT via binary search
+  function xOfT(tq) {
+    if (tq<=0) return 0;
+    // upper bound: 130
+    let lo=0, hi=130;
+    for (let k=0;k<50;k++){
+      const mid=(lo+hi)/2;
+      const tm=tOfX(mid);
+      if (tm<tq) lo=mid; else hi=mid;
+    }
+    return (lo+hi)/2;
+  }
+
+  return { tOfX, vOfX, xOfT };
+}
+
+/* ======================================================================================
+   4) Exchange math
+   Coordinate system:
+     - Zone start is x=0, zone end x=30 (for baton-in-zone time).
+     - Incoming is assumed to enter zone at x=0 at some time; we only care about relative timing.
+     - We model incoming distance-in-zone x_in(t) = ... based on their profile near end of leg.
+   Practical simplification for MVP:
+     - treat incoming zone as the last 30m of their modeled run segment.
+     - i.e. incoming covers x in [0..30] corresponding to global distance D_in_start .. D_in_start+30
+       where D_in_start is chosen so their speed is in realistic max/maint phase.
+   For coaching marks, the important part is relative speed dynamics.
+====================================================================================== */
+
+// For MVP: place zone on incoming runner at global distance 70..100 (a common “exchange happens late” region).
+// This is a simplification; later you can allow coaches to set zone placement per leg.
+const IN_ZONE_GLOBAL_START = 70; // global meters into their modeled leg at zone start
+const ZLEN = 30;
+
+function batonTimeThroughZone(exchangeX, incomingProfile, outgoingProfile, goMarkBeforeZone, reaction, freeDist) {
+  // Determine the time incoming baton enters zone (x=0 in zone coordinates).
+  const tZoneIn = incomingProfile.tOfX(IN_ZONE_GLOBAL_START);
+  const tAtX = (xZone) => incomingProfile.tOfX(IN_ZONE_GLOBAL_START + xZone) - tZoneIn;
+
+  // Incoming triggers "go" when they are goMarkBeforeZone meters before zone start:
+  // i.e. at global distance IN_ZONE_GLOBAL_START - goMarkBeforeZone
+  const tGoIncoming = incomingProfile.tOfX(IN_ZONE_GLOBAL_START - goMarkBeforeZone) - tZoneIn;
+
+  // Outgoing starts moving at tGoIncoming + reaction. Their local distance starts at 0 at that time.
+  // Outgoing distance-in-zone at time t (relative to tZoneIn):
+  function xOutZone(tRel) {
+    const tMove = tRel - (tGoIncoming + reaction);
+    if (tMove <= 0) return 0;
+    // outgoing local distance = xOfT(tMove) but we want distance-in-zone.
+    // We assume outgoing starts at zone start (x=0) at go time. (MVP)
+    return outgoingProfile.xOfT(tMove);
+  }
+  function vOutAtZoneX(xZone) {
+    // outgoing speed depends on their local x (same as zone x in MVP)
+    return outgoingProfile.vOfX(xZone);
+  }
+
+  // Exchange occurs at exchangeX (chosen) but must satisfy freeDist:
+  // outgoing is freeDist ahead at exchange moment.
+  // That means: xOut = exchangeX + freeDist at the time incoming is at exchangeX.
+  const tEx = tAtX(exchangeX);
+  const xOutNeeded = exchangeX + freeDist;
+
+  // Determine what outgoing actually has at tEx
+  const xOutAt = xOutZone(tEx);
+
+  // If outgoing isn't far enough, exchange can't happen at this exchangeX with this goMark.
+  // But in "optimizer chooses exchange point" formulation, we compute goMark to make it match.
+  const feasible = xOutAt >= xOutNeeded - 1e-3;
+
+  // Baton time through zone: baton enters zone at t=0, baton exits at:
+  // - if exchange at exchangeX, baton to exchangeX carried by incoming, then carried by outgoing to 30.
+  // Time for outgoing to go from (exchangeX+freeDist) to (30+freeDist) after their motion start.
+  // We compute absolute baton exit time relative to zone entry.
+  const tExAbs = tEx;
+  const tOutAtExMove = (tExAbs - (tGoIncoming + reaction));
+  const outTAtDist = (dist) => outgoingProfile.tOfX(dist); // time from outgoing movement start to reach local dist
+  const tOutEx = Math.max(0, tOutAtExMove); // may be <0 if reaction too slow
+  const tOutExit = outTAtDist(30 + freeDist);
+  const batonExitTime = (tGoIncoming + reaction) + tOutExit; // relative to zone entry
+  const batonTime = batonExitTime; // since zone entry is 0
+
+  const vin = incomingProfile.vOfX(IN_ZONE_GLOBAL_START + exchangeX);
+  const vout = outgoingProfile.vOfX(exchangeX + freeDist);
+
+  return { feasible, batonTime, vin, vout, tGoIncoming, tExAbs };
+}
+
+// Compute goMark required for a given exchangeX so that outgoing reaches exchangeX+freeDist at exact exchange time.
+function requiredGoMarkForExchange(exchangeX, incomingProfile, outgoingProfile, reaction, freeDist) {
+  const tZoneIn = incomingProfile.tOfX(IN_ZONE_GLOBAL_START);
+  const tAtX = (xZone) => incomingProfile.tOfX(IN_ZONE_GLOBAL_START + xZone) - tZoneIn;
+  const tEx = tAtX(exchangeX);
+
+  // Outgoing must have movement time tMove such that xOfT(tMove) = exchangeX + freeDist
+  const distNeeded = exchangeX + freeDist;
+  const tNeedMove = outgoingProfile.tOfX(distNeeded);
+
+  // Need: tEx = tGo + reaction + tNeedMove  => tGo = tEx - reaction - tNeedMove
+  const tGo = tEx - reaction - tNeedMove;
+
+  // Now convert tGo (relative to zone entry) to incoming distance before zone at that time
+  // Incoming global distance at time (tZoneIn + tGo) is xOfT(tZoneIn + tGo)
+  const incomingGlobalAtGo = incomingProfile.xOfT(tZoneIn + tGo);
+  const goMark = IN_ZONE_GLOBAL_START - incomingGlobalAtGo; // meters before zone start
+  return { goMark, tGo, tEx };
+}
+
+// Optimize exchangeX in [0..30] to minimize baton time through zone using required goMark.
+function optimizeExchange(inProf, outProf, reaction, freeDist) {
+  // brute search at 0.1m, then refine with local search
+  let best = null;
+  for (let x=0; x<=ZLEN+1e-9; x+=0.1){
+    const req = requiredGoMarkForExchange(x, inProf, outProf, reaction, freeDist);
+    if (!isFinite(req.goMark)) continue;
+    // compute baton time using that goMark
+    const res = batonTimeThroughZone(x, inProf, outProf, req.goMark, reaction, freeDist);
+    // Feasibility here should be true by construction, but numerical issues happen.
+    if (!isFinite(res.batonTime)) continue;
+    if (!best || res.batonTime < best.batonTime){
+      best = { exchangeX:x, goMark:req.goMark, batonTime:res.batonTime, vin:res.vin, vout:res.vout };
+    }
+  }
+  // local refine around best
+  if (!best) return null;
+  let x0 = best.exchangeX;
+  for (let iter=0; iter<20; iter++){
+    const step = 0.05 * Math.pow(0.8, iter);
+    const candidates = [x0-step, x0, x0+step].filter(v=>v>=0 && v<=ZLEN);
+    let bestLocal = null;
+    for (const x of candidates){
+      const req = requiredGoMarkForExchange(x, inProf, outProf, reaction, freeDist);
+      const res = batonTimeThroughZone(x, inProf, outProf, req.goMark, reaction, freeDist);
+      if (!isFinite(res.batonTime)) continue;
+      if (!bestLocal || res.batonTime < bestLocal.batonTime){
+        bestLocal = { exchangeX:x, goMark:req.goMark, batonTime:res.batonTime, vin:res.vin, vout:res.vout };
+      }
+    }
+    if (bestLocal) { x0 = bestLocal.exchangeX; best = bestLocal; }
+  }
+  return best;
+}
+
+/* ======================================================================================
+   5) UI + Charts
+====================================================================================== */
+let speedChart=null, batonChart=null;
+let lastState=null;
+
+function fmt(x, dp=2){ return (isFinite(x) ? x.toFixed(dp) : '—'); }
+
+function statusClass(ok){ return ok ? 'good' : 'bad'; }
+
+function buildCharts(){
+  const sctx=document.getElementById('speedChart');
+  const bctx=document.getElementById('batonChart');
+
+  speedChart = new Chart(sctx,{
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'Incoming speed',data:[],borderColor:'#111827',borderWidth:2,pointRadius:0,tension:0.25},
+      {label:'Outgoing speed',data:[],borderColor:'#1d4ed8',borderWidth:2,pointRadius:0,tension:0.25},
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true}},
+      scales:{
+        x:{title:{display:true,text:'Distance relative to zone start (m)'}},
+        y:{title:{display:true,text:'Speed (m/s)'}},
+      }
+    }
+  });
+
+  batonChart = new Chart(bctx,{
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'Baton position in zone',data:[],borderColor:'#16a34a',borderWidth:2,pointRadius:0,tension:0.15},
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true}},
+      scales:{
+        x:{title:{display:true,text:'Time since zone entry (s)'}},
+        y:{title:{display:true,text:'Baton position (m)'},min:0,max:30},
+      }
+    }
+  });
+}
+
+function computeExchangePair(inTime, outTime, gender, reaction, freeDist, goAdj) {
+  const inProf = buildProfile(inTime, gender);
+  const outProf = buildProfile(outTime, gender);
+
+  const opt = optimizeExchange(inProf, outProf, reaction, freeDist);
+  if (!opt) return { ok:false, msg:'No solution', opt:null };
+
+  const goOpt = opt.goMark;
+  const goAdjAbs = goOpt + goAdj;
+
+  // With adjusted go mark, the exchange point is no longer “chosen”; it emerges.
+  // We find actual exchange location by solving:
+  // outgoing_dist_at_time(incoming_at_x) = x + freeDist
+  // Search x in [0..30].
+  const tZoneIn = inProf.tOfX(IN_ZONE_GLOBAL_START);
+  const tAtX = (xZone) => inProf.tOfX(IN_ZONE_GLOBAL_START + xZone) - tZoneIn;
+
+  // incoming go time from adjusted mark
+  const tGoIncoming = inProf.tOfX(IN_ZONE_GLOBAL_START - goAdjAbs) - tZoneIn;
+
+  function xOutZoneAt(tRel) {
+    const tMove = tRel - (tGoIncoming + reaction);
+    if (tMove<=0) return 0;
+    return outProf.xOfT(tMove);
+  }
+
+  let actualX = null;
+  let prev = null;
+  for (let x=0; x<=ZLEN+1e-9; x+=0.05){
+    const t = tAtX(x);
+    const f = xOutZoneAt(t) - (x + freeDist);
+    if (prev && (prev.f===0 || f===0 || (prev.f<0 && f>0) || (prev.f>0 && f<0))){
+      // bisection
+      let lo=prev.x, hi=x;
+      for (let k=0;k<40;k++){
+        const mid=(lo+hi)/2;
+        const tm=tAtX(mid);
+        const fm=xOutZoneAt(tm) - (mid + freeDist);
+        if ((prev.f<0 && fm<0) || (prev.f>0 && fm>0)) { lo=mid; prev={x:mid,f:fm}; }
+        else { hi=mid; }
+      }
+      actualX=(lo+hi)/2;
+      break;
+    }
+    prev = {x,f};
+  }
+
+  const ok = actualX!==null && actualX>=0 && actualX<=ZLEN;
+  let batonTime = NaN, vin=NaN, vout=NaN;
+  if (ok){
+    const res = batonTimeThroughZone(actualX, inProf, outProf, goAdjAbs, reaction, freeDist);
+    batonTime = res.batonTime;
+    vin = res.vin;
+    vout = res.vout;
+  }
+
+  return {
+    ok,
+    msg: ok ? 'OK' : 'Invalid (exchange outside zone)',
+    opt: { exchangeX: opt.exchangeX, goMark: goOpt, batonTime: opt.batonTime, vin: opt.vin, vout: opt.vout },
+    adj: { goMark: goAdjAbs, exchangeX: actualX, batonTime, vin, vout },
+    profiles: { inProf, outProf },
+    meta: { tGoIncoming }
+  };
+}
+
+function pillFor(ok, msg){
+  const cls = ok ? 'good' : 'bad';
+  return `<span class="pill ${cls}">${msg}</span>`;
+}
+
+function render(){
+  const gender = document.getElementById('gender').value;
+  const freeDist = parseFloat(document.getElementById('freeDist').value);
+  const reaction = parseFloat(document.getElementById('react').value);
+  const t1 = parseFloat(document.getElementById('t1').value);
+  const t2 = parseFloat(document.getElementById('t2').value);
+  const t3 = parseFloat(document.getElementById('t3').value);
+  const t4 = parseFloat(document.getElementById('t4').value);
+  const adj12 = parseFloat(document.getElementById('adj12').value);
+  const adj23 = parseFloat(document.getElementById('adj23').value);
+  const adj34 = parseFloat(document.getElementById('adj34').value);
+
+  document.getElementById('freeDistVal').textContent = freeDist.toFixed(2);
+  document.getElementById('reactVal').textContent = reaction.toFixed(2);
+  document.getElementById('adj12Val').textContent = adj12.toFixed(1);
+  document.getElementById('adj23Val').textContent = adj23.toFixed(1);
+  document.getElementById('adj34Val').textContent = adj34.toFixed(1);
+
+  const ex12 = computeExchangePair(t1,t2,gender,reaction,freeDist,adj12);
+  const ex23 = computeExchangePair(t2,t3,gender,reaction,freeDist,adj23);
+  const ex34 = computeExchangePair(t3,t4,gender,reaction,freeDist,adj34);
+
+  lastState = { gender, freeDist, reaction, t1,t2,t3,t4, adj12,adj23,adj34, ex12,ex23,ex34 };
+
+  const rows = [
+    {name:'1 → 2', ex: ex12},
+    {name:'2 → 3', ex: ex23},
+    {name:'3 → 4', ex: ex34},
+  ];
+
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+  for (const r of rows){
+    const ex=r.ex;
+    const status = ex.ok ? `<span class="pill good">OK</span>` : `<span class="pill bad">Invalid</span>`;
+    const opt = ex.opt;
+    const adj = ex.adj;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${r.name}</strong></td>
+      <td>${status}</td>
+      <td>${opt ? fmt(opt.exchangeX,2) : '—'}</td>
+      <td>${opt ? fmt(opt.goMark,2) : '—'}</td>
+      <td>${adj ? fmt(adj.goMark,2) : '—'}</td>
+      <td>${(adj && adj.exchangeX!==null) ? fmt(adj.exchangeX,2) : '—'}</td>
+      <td>${(adj && isFinite(adj.vin)) ? fmt(adj.vin,2) : '—'}</td>
+      <td>${(adj && isFinite(adj.vout)) ? fmt(adj.vout,2) : '—'}</td>
+      <td>${(adj && isFinite(adj.batonTime)) ? fmt(adj.batonTime,3) : '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  renderCharts();
+}
+
+function renderCharts(){
+  if (!speedChart || !batonChart || !lastState) return;
+  const which = document.getElementById('whichEx').value;
+  const ex = which==='12' ? lastState.ex12 : which==='23' ? lastState.ex23 : lastState.ex34;
+
+  const pill = document.getElementById('statusPill');
+  pill.className = `pill ${ex.ok ? 'good':'bad'}`;
+  pill.textContent = ex.ok ? 'OK (exchange in zone)' : 'Invalid (exchange outside zone)';
+
+  const cap = document.getElementById('chartCaption');
+  if (ex.opt){
+    cap.innerHTML = `Optimal: exchange <span class="mono">${fmt(ex.opt.exchangeX,2)}</span> m, go mark <span class="mono">${fmt(ex.opt.goMark,2)}</span> m. Adjusted go mark <span class="mono">${fmt(ex.adj.goMark,2)}</span> m.`;
+  } else {
+    cap.textContent = '—';
+  }
+
+  // build speed chart data around zone: x from -10..40
+  const xLo=-10, xHi=40, step=0.25;
+  const xs=[], vin=[], vout=[];
+  const inProf = ex.profiles?.inProf;
+  const outProf = ex.profiles?.outProf;
+  if (inProf && outProf){
+    for (let x=xLo; x<=xHi+1e-9; x+=step){
+      xs.push(x);
+      // incoming global distance = IN_ZONE_GLOBAL_START + x (can go below 0, clamp)
+      const gin = Math.max(0, IN_ZONE_GLOBAL_START + x);
+      vin.push(inProf.vOfX(gin));
+
+      // outgoing speed as function of their local distance (zone x, clamp >=0)
+      const gout = Math.max(0, x + lastState.freeDist); // visualize at “handoff geometry” offset
+      vout.push(outProf.vOfX(gout));
+    }
+  }
+
+  speedChart.data.labels = xs;
+  speedChart.data.datasets[0].data = vin;
+  speedChart.data.datasets[1].data = vout;
+  speedChart.update('none');
+
+  // baton position vs time inside zone (0..30), using adjusted go mark and actual exchange if valid
+  const labels=[], batonPos=[];
+  if (ex.ok && ex.adj && ex.adj.exchangeX!==null){
+    const xEx = ex.adj.exchangeX;
+    const tZoneIn = inProf.tOfX(IN_ZONE_GLOBAL_START);
+    const tAtXin = (xZ)=> inProf.tOfX(IN_ZONE_GLOBAL_START + xZ) - tZoneIn;
+    const tGoIn = inProf.tOfX(IN_ZONE_GLOBAL_START - ex.adj.goMark) - tZoneIn;
+
+    // outgoing move start
+    const tMove0 = tGoIn + lastState.reaction;
+
+    // sample time until baton exit
+    const batonExit = batonTimeThroughZone(xEx, inProf, outProf, ex.adj.goMark, lastState.reaction, lastState.freeDist).batonTime;
+    const dt = batonExit/120; // ~120 samples
+    for (let t=0; t<=batonExit+1e-9; t+=dt){
+      labels.push(t);
+      let x;
+      if (t <= tAtXin(xEx)){
+        x = Math.min(30, Math.max(0, xEx * (t / tAtXin(xEx))));
+      } else {
+        // baton is with outgoing: compute outgoing local distance at time t
+        const tMove = t - tMove0;
+        const d = tMove<=0 ? 0 : outProf.xOfT(tMove);
+        // baton zone position is outgoing distance - freeDist (since at exchange outgoing was freeDist ahead)
+        x = Math.max(0, Math.min(30, d - lastState.freeDist));
+      }
+      batonPos.push(x);
+    }
+  }
+
+  batonChart.data.labels = labels;
+  batonChart.data.datasets[0].data = batonPos;
+  batonChart.update('none');
+}
+
+function hook(id, fn){ document.getElementById(id).addEventListener('input', fn); }
+hook('gender', render);
+['freeDist','react','t1','t2','t3','t4','adj12','adj23','adj34','whichEx'].forEach(id=>hook(id, render));
+
+buildCharts();
+render();
+</script>
+
+</body>
+</html>
